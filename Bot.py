@@ -17,7 +17,7 @@ item_list = {'point': 1, 'high-res blue dragon': 5, 'meme': 10, 'eli': 25}
 
 vault_path = 'J:/Vault'
 
-date_file = 'J:/Vault/Points/dates.json'
+date_file = vault_root + '/Points/dates.json'
 file = open(date_file, 'r')
 
 dates = {}
@@ -30,7 +30,7 @@ if len(file.read()) > 0:
 
 print(str(dates))
 
-bank_file = 'J:/Vault/Points/bank.json'
+bank_file = vault_root + '/Points/bank.json'
 file = open(bank_file, 'r')
 
 accounts = {}
@@ -296,9 +296,9 @@ async def use_item(message, item):
                 else:
                     await client.send_message(message.channel, 'Error. Please enter an @mention of who you want to receive the point')
             elif item.lower() == 'high-res blue dragon':
-                await client.send_file(message.channel, 'J:/Vault/high_res_blue_dragon.jpg')
+                await client.send_file(message.channel, vault_root + '/high_res_blue_dragon.jpg')
             elif item.lower() == 'eli':
-                await client.send_file(message.channel, 'J:/Vault/eli.png')
+                await client.send_file(message.channel, vault_root + '/eli.png')
             elif item.lower() == 'meme':
                 await client.send_message(message.channel, 'Here is your meme, ' + str(message.author)[:-5])
                 await send_random_image(message)
@@ -366,7 +366,7 @@ async def send_random_image(message):
     files.sort()
     file_index = random.randint(0, len(files))
     await client.send_file(message.channel, files[file_index])
-    if files[file_index] == 'J:/Vault/eli.png' or files[file_index] == 'J:/Vault/eli soren.png':
+    if files[file_index] == vault_root + '/eli.png' or files[file_index] == vault_root + '/eli soren.png':
         await client.send_message(message.channel, 'Wow! You found a rare eli! Have 25 points!')
         give_item(str(message.author), 'point', 25)
 
