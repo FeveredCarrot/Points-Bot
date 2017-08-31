@@ -132,13 +132,13 @@ async def the_vault(message):
 
                 if reply.content.startswith("stop"):
                     break
-                elif Path(vault_path + reply.content).exists():
-                    if Path(vault_path + reply.content).is_file():
+                elif Path(vault_path + '/' + reply.content).exists():
+                    if Path(vault_path + '/' + reply.content).is_file():
                         if reply.content[-4:].lower() == ".png" or reply.content[-4:].lower() == ".jpg":
-                            await client.send_file(message.channel, vault_path + reply.content)
+                            await client.send_file(message.channel, vault_path + '/' + reply.content)
                         elif reply.content[-4:].lower() == ".txt":
-                            file = open(vault_path + reply.content, 'r')
-                            update_vault_path(vault_path + reply.content)
+                            file = open(vault_path + '/' + reply.content, 'r')
+                            update_vault_path(vault_path + '/' + reply.content)
                             await client.send_message(message.channel,
                                                       'File ' + reply.content + ':\n\n' + str(file.read()))
                             file.close()
