@@ -1,0 +1,5 @@
+#edits message, waits until done before moving on to next line
+await client.edit_message(tmp, 'You have {} messages.'.format(counter))
+
+# sends message, waits until done before moving on to next line
+await client.send_message(message.channel, 'Calculating messages...')
