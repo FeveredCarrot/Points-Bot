@@ -15,7 +15,8 @@ client = discord.Client()
 prefix = '!'
 item_list = {'point': 1, 'high-res blue dragon': 5, 'meme': 10, 'eli': 25}
 
-vault_path = 'J:/Vault'
+vault_path = '/home/pi/Desktop/Vault'
+vault_root = vault_path
 
 date_file = vault_root + '/Points/dates.json'
 file = open(date_file, 'r')
@@ -28,8 +29,6 @@ if len(file.read()) > 0:
         dates = json.load(f)
     f.close()
 
-print(str(dates))
-
 bank_file = vault_root + '/Points/bank.json'
 file = open(bank_file, 'r')
 
@@ -40,8 +39,6 @@ if len(file.read()) > 0:
     with open(bank_file, 'r') as f:
         accounts = json.load(f)
     f.close()
-
-print(str(accounts))
 
 
 @client.event
@@ -119,12 +116,12 @@ async def the_vault(message):
             if Path(vault_path).is_dir():
                 file_list = list_files(vault_path)
                 await client.send_message(message.channel,
-                                          'Files in ' + vault_path[3:] + ':\n\n' + str(file_list))
+                                          'Files in ' + vault_path[len(vault_root) + 1:] + ':\n\n' + str(file_list))
             else:
                 get_containing_folder(vault_path)
                 file_list = list_files(vault_path)
                 await client.send_message(message.channel,
-                                          'Files in ' + vault_path[3:-1] + ':\n\n' + str(file_list))
+                                          'Files in ' + vault_path[len(vault_root) + 1:] + ':\n\n' + str(file_list))
 
         elif reply.content == "2":
             isDone = False
