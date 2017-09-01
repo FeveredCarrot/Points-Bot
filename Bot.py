@@ -15,7 +15,8 @@ client = discord.Client()
 prefix = '!'
 item_list = {'point': 1, 'high-res blue dragon': 5, 'meme': 10, 'eli': 25}
 
-vault_path = '/home/pi/Desktop/Vault'
+#vault_path = '/home/pi/Desktop/Vault'
+vault_path = 'J:\Vault'
 vault_root = vault_path
 
 date_file = vault_root + '/Points/dates.json'
@@ -84,8 +85,13 @@ async def on_message(message):
                 json.dump(dates, file)
             file.close()
     elif message.content.startswith(prefix + 'buy'):
-        if len(message.content > 5):
+        if len(message.content) > 5:
             await buy_item(message)
+        else:
+            await client.send_message(message.channel, 'Error. You did it wrong, retard. The correct way is \"!buy [amount] [item]\"')
+    elif message.content.startswith(prefix + 'sell'):
+        if len(message.content) > 6:
+            await sell_item(message)
         else:
             await client.send_message(message.channel, 'Error. You did it wrong, retard. The correct way is \"!buy [amount] [item]\"')
     else:
@@ -347,6 +353,38 @@ async def buy_item(message):
     else:
         await client.send_message(message.channel, 'Sorry, you don\'t have enough points to buy ' + str(amount) + ' ' + item + 's')
 
+
+async def sell_item(message):
+    space_counter = 0
+    amount_space = 0
+    item_space = 0
+    index = 0
+    for ch in message.content:
+        if ch == ' ':
+            space_counter += 1
+            if space_counter == 1:
+                amount_space = index
+            elif space_counter == 2:
+                item_space = index
+        index += 1
+
+    if (amount_space == 0 or item_space == 0) or (message.content[amount_space + 1] == ' ' or message.content[item_space + 1] == ' '):
+        await client.send_message(message.channel, 'Error. You did it wrong, retard. The correct way is \"!sell [amount] [item]\"')
+    else:
+        amount = int(message.content[amount_space:item_space])
+        item = message.content[item_space + 1:]
+        if message.content[-1] == 's':
+            item = message.content[item_space + 1: -1]
+    if str(message.author) not in accounts:
+        create_account(str(message.author))
+
+    give_item(str(message.author), 'point', item_list[item] * amount)
+    give_item(str(message.author), item, 0 - amount)
+
+    if amount == 1:
+        await client.send_message(message.channel, 'Transaction complete. You sold a ' + item)
+    else:
+        await client.send_message(message.channel, 'Transaction complete. You sold ' + str(amount) + ' ' + item + 's')
 
 def give_item(user_name, thing, amount):
     if user_name in accounts:
