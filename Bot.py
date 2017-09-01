@@ -5,6 +5,7 @@ from urllib.request import Request, urlopen
 from pathlib import Path
 import glob
 import discord
+import operator
 import asyncio
 import json
 import logging
@@ -17,8 +18,8 @@ item_list = {'point': 1, 'high-res blue dragon': 5, 'meme': 10, 'eli': 25, 'poin
 eli_list = ['eli.png', 'eli_2.png', 'eli_3.png', 'eli_soren.png', 'real_eli.png', 'year_of_the_rooster.png']
 rock_list = ['small_smiling_face.jpg']
 
-vault_path = '/home/pi/Desktop/Vault'
-#vault_path = 'J:\Vault'
+#vault_path = '/home/pi/Desktop/Vault'
+vault_path = 'J:\Vault'
 vault_root = vault_path
 
 date_file = vault_root + '/Points/dates.json'
@@ -481,15 +482,30 @@ def create_account(user):
 
 
 async def show_leaderboard(message):
-    text = '-Leaderboard-\n'
+    text = ':checkered_flag: __**Leaderboard**__ :checkered_flag: \n'
+    values = {}
     for user in accounts:
-        text += ' \n' + user[:-5] + '\'s items:\n'
+        value = 0
         for item in accounts[user]:
-            text += str(accounts[user][item]) + ' ' + str(item)
-            if accounts[user][item] == 1:
-                text += ' \n'
-            else:
-                text += 's\n'
+            value += accounts[user][item] * item_list[item]
+        values[user] = value
+
+    sorted_account_values = sorted(values.items(), key=operator.itemgetter(1))
+    sorted_account_values.reverse()
+    index = 0;
+    for user in sorted_account_values:
+        text += ' \n**' + str(user[0][:-5]) + '\'s account:**\n'
+        text += str(accounts[str(user[0])]['point']) + ' ' + 'point'
+        if accounts[str(user[0])]['point'] == 1:
+            text += ' \n'
+        else:
+            text += 's\n'
+        if sorted_account_values[index][1] == 1:
+            text += 'Total value: ' + str(sorted_account_values[index][1]) + ' point\n'
+        else:
+            text += 'Total value: ' + str(sorted_account_values[index][1]) + ' points\n'
+        index += 1
+
     await client.send_message(message.channel, text)
 
 
