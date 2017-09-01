@@ -83,6 +83,11 @@ async def on_message(message):
             with open(date_file, 'w') as file:
                 json.dump(dates, file)
             file.close()
+    elif message.content.startswith(prefix + 'buy'):
+        if len(message.content > 5):
+            await buy_item(message)
+        else:
+            await client.send_message(message.channel, 'Error. You did it wrong, retard. The correct way is \"!buy [amount] [item]\"')
     else:
         reply = await client.wait_for_message()
         if len(reply.attachments) > 0 and str(message.author) is not 'Points Bot#7331':
@@ -307,6 +312,42 @@ async def use_item(message, item):
         await client.send_message(message.channel, 'Error. ' + item[0].upper() + item[1:].lower() + ' isn\'t a real item. Tell Jasper to add it.')
 
 
+async def buy_item(message):
+    space_counter = 0
+    amount_space = 0
+    item_space = 0
+    index = 0
+    for ch in message.content:
+        if ch == ' ':
+            space_counter += 1
+            if space_counter == 1:
+                amount_space = index
+            elif space_counter == 2:
+                item_space = index
+        index += 1
+
+    if (amount_space == 0 or item_space == 0) or (message.content[amount_space + 1] == ' ' or message.content[item_space + 1] == ' '):
+        await client.send_message(message.channel, 'Error. You did it wrong, retard. The correct way is \"!buy [amount] [item]\"')
+    else:
+        amount = int(message.content[amount_space:item_space])
+        item = message.content[item_space + 1:]
+        if message.content[-1] == 's':
+            item = message.content[item_space + 1: -1]
+    if str(message.author) not in accounts:
+        create_account(str(message.author))
+    if accounts[str(message.author)]['point'] >= item_list[item] * amount:
+        give_item(str(message.author), 'point', (0 - item_list[item]) * amount)
+        give_item(str(message.author), item, amount)
+        if amount == 1:
+            await client.send_message(message.channel, 'Transaction complete. You bought a ' + item)
+        else:
+            await client.send_message(message.channel, 'Transaction complete. You bought ' + str(amount) + ' ' + item + 's')
+    elif amount ==1:
+        await client.send_message(message.channel, 'Sorry, you don\'t have enough points to buy ' + str(amount) + ' ' + item)
+    else:
+        await client.send_message(message.channel, 'Sorry, you don\'t have enough points to buy ' + str(amount) + ' ' + item + 's')
+
+
 def give_item(user_name, thing, amount):
     if user_name in accounts:
         if thing in accounts[user_name]:
@@ -358,9 +399,8 @@ async def show_leaderboard(message):
 
 
 async def send_random_image(message):
-    files = glob.glob('J:/Vault/*.png')
-    files += glob.glob('J:/Vault/*.jpg')
-    files.sort()
+    files = glob.glob(vault_root + '/*.png')
+    files += glob.glob(vault_root + '/*.jpg')
     file_index = random.randint(0, len(files))
     await client.send_file(message.channel, files[file_index])
     if files[file_index] == vault_root + '/eli.png' or files[file_index] == vault_root + '/eli soren.png':
