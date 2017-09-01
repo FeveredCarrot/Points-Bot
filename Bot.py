@@ -13,7 +13,9 @@ logging.basicConfig(level=logging.INFO)
 
 client = discord.Client()
 prefix = '!'
-item_list = {'point': 1, 'high-res blue dragon': 5, 'meme': 10, 'eli': 25}
+item_list = {'point': 1, 'high-res blue dragon': 5, 'meme': 10, 'eli': 25, 'point voucher': 0, 'small smiling stone face': 50}
+eli_list = ['eli.png', 'eli_2.png', 'eli_3.png', 'eli_soren.png', 'real_eli.png', 'year_of_the_rooster.png']
+rock_list = ['small_smiling_face.jpg']
 
 vault_path = '/home/pi/Desktop/Vault'
 #vault_path = 'J:\Vault'
@@ -329,10 +331,22 @@ async def use_item(message, item):
             elif item.lower() == 'high-res blue dragon':
                 await client.send_file(message.channel, vault_root + '/high_res_blue_dragon.jpg')
             elif item.lower() == 'eli':
-                await client.send_file(message.channel, vault_root + '/eli.png')
+                await client.send_file(message.channel, vault_root + '/' + eli_list[random.randint(0, len(eli_list))])
             elif item.lower() == 'meme':
                 await client.send_message(message.channel, 'Here is your meme, ' + str(message.author)[:-5])
                 await send_random_image(message)
+            elif item.lower() == 'point voucher':
+                await client.send_message(message.channel, 'Who would you like to give this point to?')
+                reply = await client.wait_for_message(timeout=300, author=message.author)
+                if len(reply.mentions) > 0:
+                    give_item(str(reply.mentions[0]), 'point', 1)
+                    give_item(str(message.author), 'point voucher', -1)
+                    await client.send_message(message.channel, 'Gave 1 point to ' + str(reply.mentions[0]))
+                else:
+                    await client.send_message(message.channel, 'Error. Please enter an @mention of who you want to receive the point')
+                    return
+            elif item.lower() == 'small smiling stone face':
+                await client.send_file(message.channel, vault_root + '/small_smiling_face.jpg')
 
             give_item(str(message.author), item, -1)
         else:
@@ -428,7 +442,6 @@ async def sell_item(message):
         await client.send_message(message.channel, 'Sorry, you don\'t have any ' + item + '\'s to sell')
 
 
-
 def give_item(user_name, thing, amount):
     if user_name in accounts:
         if thing in accounts[user_name]:
@@ -446,6 +459,7 @@ def give_item(user_name, thing, amount):
     with open(bank_file, 'w') as file:
         json.dump(accounts, file)
     file.close()
+
 
 async def give_random_item(user, message):
     #list_index = random.randint(0, len(item_list))
@@ -490,9 +504,12 @@ async def send_random_image(message):
     files += glob.glob(vault_root + '/*.jpg')
     file_index = random.randint(0, len(files))
     await client.send_file(message.channel, files[file_index])
-    if files[file_index] == vault_root + '/eli.png' or files[file_index] == vault_root + '/eli soren.png':
-        await client.send_message(message.channel, 'Wow! You found a rare eli! Have 25 points!')
-        give_item(str(message.author), 'point', 25)
+    if files[file_index][len(vault_root) + 1:] in eli_list:
+        await client.send_message(message.channel, 'Wow! You found a rare Eli!')
+        give_item(str(message.author), 'eli', 1)
+    elif files[file_index][len(vault_root) + 1:] in rock_list:
+        await client.send_message(message.channel, 'Wow! You found a rare small smiling stone face!')
+        give_item(str(message.author), 'small smiling stone face', 1)
 
 
 client.run('MjU4MDA0MjM1OTAyMjU1MTA1.DIda-g.j6b0db-C-vg1MAkAqpxtbDw1hw4')
