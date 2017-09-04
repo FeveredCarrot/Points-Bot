@@ -1,49 +1,39 @@
 import os
 import random
 import datetime
+from abc import ABCMeta, abstractmethod
 from urllib.request import Request, urlopen
 from pathlib import Path
 import glob
 import discord
 import operator
-import asyncio
-import json
+import pickle
+import classes
 import logging
 
 logging.basicConfig(level=logging.INFO)
 
 client = discord.Client()
+classes.client = client
 prefix = '!'
-item_list = {'point': 1, 'high-res blue dragon': 5, 'meme': 10, 'eli': 25, 'point voucher': 0, 'small smiling stone face': 50}
-eli_list = ['eli.png', 'eli_2.png', 'eli_3.png', 'eli_soren.png', 'real_eli.png', 'year_of_the_rooster.png']
+item_list = {'point': 1, 'high-res blue dragon': 5, 'meme': 10, 'eli': 25, 'small smiling stone face': 50}
+eli_list = ['eli.png', 'eli_2.png', 'eli_3.png', 'eli_soren.png', 'real_eli.png', 'year_of_the_rooster.png', 'eli_2.jpg']
 rock_list = ['small_smiling_face.jpg']
 
 #vault_path = '/home/pi/Desktop/Vault'
-vault_path = 'J:\Vault'
+vault_path = 'J:/Vault'
 vault_root = vault_path
 
-date_file = vault_root + '/Points/dates.json'
-file = open(date_file, 'r')
-
-dates = {}
+bank_file = vault_root + '/Points/bank.txt'
+file = open(bank_file, 'rb')
 
 if len(file.read()) > 0:
     file.close()
-    with open(date_file, 'r') as f:
-        dates = json.load(f)
-    f.close()
-
-bank_file = vault_root + '/Points/bank.json'
-file = open(bank_file, 'r')
-
-accounts = {}
-
-if len(file.read()) > 0:
+    with open(bank_file, 'rb') as f:
+        classes.accounts = pickle.load(f)
+    print(classes.accounts)
+else:
     file.close()
-    with open(bank_file, 'r') as f:
-        accounts = json.load(f)
-    f.close()
-
 
 @client.event
 async def on_ready():
@@ -56,58 +46,80 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
+
+    user_name = str(message.author)
+    if message.content.startswith(prefix):
+        if not account_in_list(user_name):
+            create_account(str(message.author))
+
     if message.content.startswith(prefix + 'hey'):
         await client.send_message(message.channel, 'HEY GAMERS')
     elif message.content.startswith(prefix + 'vault'):
-
-        if Path(vault_path).exists():
+        # if Path(vault_path).exists():
+        if False:
             await the_vault(message)
         else:
             await client.send_message(message.channel, 'Sorry, the vault is GONE')
             return
     elif message.content.startswith(prefix + 'give'):
-        await points(message)
+        await get_account(user_name).give(message)
     elif message.content.startswith(prefix + 'leaderboard'):
         await show_leaderboard(message)
     elif message.content.startswith(prefix + 'use'):
-        await use_item(message, message.content[5:])
-    elif message.content.startswith(prefix + 'daily'):
-        if str(message.author) in dates:
-            if datetime.date.today().strftime('%m, %d') == dates[str(message.author)]:
-                await client.send_message(message.channel, 'Sorry, you already got your daily items. Please try again tomorrow')
+        spaces = message_spaces(message)
+
+        if len(spaces) > 0:
+            item = message.content[spaces[0] + 1:]
+            if item not in item_list:
+                await client.send_message(message.channel, 'Error. Not a valid item')
+                return
+            await get_account(user_name).use_item(message, item)
+        else:
+            await client.send_message(message.channel, 'Error. Please enter an item to use')
+            return
+
+    elif message.content.startswith(prefix + 'payday'):
+            print((datetime.datetime.utcnow() - get_account(user_name).last_payday).total_seconds())
+            if (datetime.datetime.utcnow() - get_account(user_name).last_payday).total_seconds() < 10800:
+                await client.send_message(message.channel, 'Sorry, you already got your items recently. Please wait ' + str(int((10800 - (datetime.datetime.utcnow() - get_account(user_name).last_payday).total_seconds()) / 60)) + ' more minutes and try again')
                 return
             else:
-                await give_random_item(str(message.author), message)
-                dates[str(message.author)] = datetime.date.today().strftime('%m, %d')
-                with open(date_file, 'w') as file:
-                    json.dump(dates, file)
-                file.close()
-        else:
-            await give_random_item(str(message.author), message)
-            dates[str(message.author)] = datetime.date.today().strftime('%m, %d')
-            with open(date_file, 'w') as file:
-                json.dump(dates, file)
-            file.close()
+                get_account(user_name).last_payday = datetime.datetime.utcnow()
+                stuff = await get_account(user_name).give_random_item(message, 3)
+                if stuff[1] == 1:
+                    await client.send_message(message.channel, 'Cool, you found 1 ' + stuff[0])
+                else:
+                    await client.send_message(message.channel, 'Cool, you found ' + str(stuff[1]) + ' ' + stuff[0] + 's')
+
     elif message.content.startswith(prefix + 'buy'):
         if len(message.content) > 5:
-            await buy_item(message)
+            await get_account(user_name).buy_item(message)
         else:
             await client.send_message(message.channel, 'Error. You did it wrong, retard. The correct way is \"!buy [amount] [item]\"')
             return
     elif message.content.startswith(prefix + 'sell'):
         if len(message.content) > 6:
-            await sell_item(message)
+            await get_account(user_name).sell_item(message)
         else:
             await client.send_message(message.channel, 'Error. You did it wrong, retard. The correct way is \"!buy [amount] [item]\"')
             return
     elif message.content.startswith(prefix + 'account'):
-        text = str(message.author)[:-5] + '\'s items:\n \n'
-        if str(message.author) not in accounts:
-            create_account(str(message.author))
+        spaces = message_spaces(message)
+        user = user_name
 
-        for item in accounts[str(message.author)]:
-            text += str(accounts[str(message.author)][item]) + ' ' + item
-            if accounts[str(message.author)][item] == 1:
+        if len(message.mentions) > 0:
+            if account_in_list(str(message.mentions[0])):
+                user = str(message.mentions[0])
+            else:
+                await client.send_message(message.channel, 'Error. that person doesn\'t have an account yet')
+                return
+
+        text = user[:-5] + '\'s items:\n \n'
+        if not account_in_list(user_name):
+            create_account(str(message.author))
+        for item in get_account(user).items:
+            text += str(get_account(user).items[item].amount) + ' ' + item
+            if get_account(user_name).items[item].amount == 1:
                 text += ' \n'
             else:
                 text += 's\n'
@@ -117,10 +129,11 @@ async def on_message(message):
     elif message.content.startswith(prefix + 'play'):
         if len(message.content) > 6:
             game = message.content[6:]
-            await client.send_message(message.channel, content=(game + 'aborky'),tts=True)
+            await client.send_message(message.channel, content=(game + 'aborky'), tts=True)
     else:
         reply = await client.wait_for_message()
-        if len(reply.attachments) > 0 and str(message.author) is not 'Points Bot#7331':
+        if len(reply.attachments) > 0 and str(reply.author) != 'Points Bot#7331':
+            print(reply.author)
             req = Request(reply.attachments[0]["proxy_url"], headers={'User-Agent': 'Mozilla/5.0'})
             webpage = urlopen(req).read()
             image = open(vault_path + '/' + str(reply.attachments[0]["filename"]), 'wb')
@@ -272,231 +285,53 @@ def get_containing_folder(path):
     vault_path = path[:index]
 
 
-async def points(message):
-    if len(message.mentions) > 0:
-        user = message.mentions[0]
-        print('user:' + str(user))
-        print('author:' + str(message.author))
-        space_counter = 0
-        amount_space = 0
-        item_space = 0
-        index = 0
-        for ch in message.content:
-            if ch == ' ':
-                space_counter += 1
-                if space_counter == 2:
-                    amount_space = index
-                elif space_counter == 3:
-                    item_space = index
-            index += 1
-
-        if (amount_space == 0 or item_space == 0) or (
-                message.content[amount_space + 1] == ' ' or message.content[item_space + 1] == ' '):
-            await client.send_message(message.channel, 'Error. You did it wrong, retard. The correct way is \"!give [@user] [amount] [item]\"')
-            return
-        else:
-            amount = int(message.content[amount_space:item_space])
-            item = message.content[item_space + 1:]
-            if message.content[-1] == 's':
-                item = message.content[item_space + 1: -1]
-
-            if str(message.author) in accounts:
-                if item in accounts[str(message.author)]:
-                    if accounts[str(message.author)][item] >= amount:
-                        accounts[str(message.author)][item] -= amount
-                        give_item(str(user), item, amount)
-                        await show_leaderboard(message)
-                    else:
-                        await client.send_message(message.channel, 'Sorry, ' + str(message.author)[:-5] + ', you don\'t have enough ' + item + 's to give.')
-                else:
-                    await client.send_message(message.channel, 'Sorry, ' + str(message.author)[:-5] + ', you don\'t have any ' + item + 's to give.')
-            else:
-                create_account(str(message.author))
-                accounts[str(message.author)][item] -= amount
-                give_item(str(user), item, amount)
-    else:
-        await client.send_message(message.channel, 'Error. You did it wrong, retard. The correct way is \"!give [@user] [amount] [item]\"')
+def get_account(user):
+    for i in classes.accounts:
+        if i.name == user:
+            return i
 
 
-async def use_item(message, item):
-    if item in item_list:
-        if accounts[str(message.author)][item] > 0:
-            if item.lower() == 'point':
-                await client.send_message(message.channel, 'Who would you like to give point to?')
-                reply = await client.wait_for_message(timeout=300, author=message.author)
-                if len(reply.mentions) > 0:
-                    give_item(str(reply.mentions[0]), 'point', 1)
-                else:
-                    await client.send_message(message.channel, 'Error. Please enter an @mention of who you want to receive the point')
-                    return
-            elif item.lower() == 'high-res blue dragon':
-                await client.send_file(message.channel, vault_root + '/high_res_blue_dragon.jpg')
-            elif item.lower() == 'eli':
-                await client.send_file(message.channel, vault_root + '/' + eli_list[random.randint(0, len(eli_list))])
-            elif item.lower() == 'meme':
-                await client.send_message(message.channel, 'Here is your meme, ' + str(message.author)[:-5])
-                await send_random_image(message)
-            elif item.lower() == 'point voucher':
-                await client.send_message(message.channel, 'Who would you like to give this point to?')
-                reply = await client.wait_for_message(timeout=300, author=message.author)
-                if len(reply.mentions) > 0:
-                    give_item(str(reply.mentions[0]), 'point', 1)
-                    give_item(str(message.author), 'point voucher', -1)
-                    await client.send_message(message.channel, 'Gave 1 point to ' + str(reply.mentions[0]))
-                else:
-                    await client.send_message(message.channel, 'Error. Please enter an @mention of who you want to receive the point')
-                    return
-            elif item.lower() == 'small smiling stone face':
-                await client.send_file(message.channel, vault_root + '/small_smiling_face.jpg')
-
-            give_item(str(message.author), item, -1)
-        else:
-            await client.send_message(message.channel, 'Error. You don\'t have any ' + item + "s")
-    else:
-        await client.send_message(message.channel, 'Error. ' + item[0].upper() + item[1:].lower() + ' isn\'t a real item. Tell Jasper to add it.')
-
-
-async def buy_item(message):
-    space_counter = 0
-    amount_space = 0
-    item_space = 0
-    index = 0
-    for ch in message.content:
-        if ch == ' ':
-            space_counter += 1
-            if space_counter == 1:
-                amount_space = index
-            elif space_counter == 2:
-                item_space = index
-        index += 1
-
-    if (amount_space == 0 or item_space == 0) or (message.content[amount_space + 1] == ' ' or message.content[item_space + 1] == ' '):
-        await client.send_message(message.channel, 'Error. You did it wrong, retard. The correct way is \"!buy [amount] [item]\"')
-        return
-    else:
-        amount = int(message.content[amount_space:item_space])
-
-        if amount < 0:
-            await client.send_message(message.channel, 'Error. You can\'t buy a negative number of items')
-            return
-
-        item = message.content[item_space + 1:]
-        if message.content[-1] == 's':
-            item = message.content[item_space + 1: -1]
-    if str(message.author) not in accounts:
-        create_account(str(message.author))
-    if accounts[str(message.author)]['point'] >= item_list[item] * amount:
-        give_item(str(message.author), 'point', (0 - item_list[item]) * amount)
-        give_item(str(message.author), item, amount)
-        if amount == 1:
-            await client.send_message(message.channel, 'Transaction complete. You bought a ' + item)
-        else:
-            await client.send_message(message.channel, 'Transaction complete. You bought ' + str(amount) + ' ' + item + 's')
-    elif amount ==1:
-        await client.send_message(message.channel, 'Sorry, you don\'t have enough points to buy ' + str(amount) + ' ' + item)
-    else:
-        await client.send_message(message.channel, 'Sorry, you don\'t have enough points to buy ' + str(amount) + ' ' + item + 's')
-
-
-async def sell_item(message):
-    space_counter = 0
-    amount_space = 0
-    item_space = 0
-    index = 0
-    for ch in message.content:
-        if ch == ' ':
-            space_counter += 1
-            if space_counter == 1:
-                amount_space = index
-            elif space_counter == 2:
-                item_space = index
-        index += 1
-
-    if (amount_space == 0 or item_space == 0) or (message.content[amount_space + 1] == ' ' or message.content[item_space + 1] == ' '):
-        await client.send_message(message.channel, 'Error. You did it wrong, retard. The correct way is \"!sell [amount] [item]\"')
-        return
-    else:
-        amount = int(message.content[amount_space:item_space])
-
-        if amount < 0:
-            await client.send_message(message.channel, 'Error. You can\'t sell a negative number of items')
-            return
-
-        item = message.content[item_space + 1:]
-        if message.content[-1] == 's':
-            item = message.content[item_space + 1: -1]
-    if str(message.author) not in accounts:
-        create_account(str(message.author))
-
-    if item in accounts[str(message.author)]:
-        if accounts[str(message.author)][item] >= amount:
-            give_item(str(message.author), 'point', item_list[item] * amount)
-            give_item(str(message.author), item, 0 - amount)
-
-            if amount == 1:
-                await client.send_message(message.channel, 'Transaction complete. You sold a ' + item + ' for ' + str(item_list[item]) + 'points')
-            else:
-                await client.send_message(message.channel, 'Transaction complete. You sold ' + str(amount) + ' ' + item + 's for ' + str(item_list[item] * amount) + ' points')
-        else:
-            await client.send_message(message.channel, 'Sorry, you don\'t have enough ' + item + '\'s to sell')
-    else:
-        await client.send_message(message.channel, 'Sorry, you don\'t have any ' + item + '\'s to sell')
-
-
-def give_item(user_name, thing, amount):
-    if user_name in accounts:
-        if thing in accounts[user_name]:
-            accounts[user_name][thing] += amount
-        else:
-            accounts[user_name][thing] = amount
-
-    else:
-        create_account(user_name)
-        if thing in accounts[user_name]:
-            accounts[user_name][thing] += amount
-        else:
-            accounts[user_name][thing] = amount
-
-    with open(bank_file, 'w') as file:
-        json.dump(accounts, file)
-    file.close()
-
-
-async def give_random_item(user, message):
-    #list_index = random.randint(0, len(item_list))
-    item = random.choice(list(item_list.keys()))
-    amount = random.randint(1, 5)
-    give_item(user, item, amount)
-
-    if amount == 1:
-        await client.send_message(message.channel, 'Here, you got ' + str(amount) + ' ' + item)
-    else:
-        await client.send_message(message.channel, 'Here, you got ' + str(amount) + ' ' + item + 's')
+def account_in_list(user):
+    for i in classes.accounts:
+        if i.name == user:
+            return True
+    return False
 
 
 def create_account(user):
     print('Setting up account for ' + user)
-    accounts[user] = {'point': 5}
+    classes.accounts.append(classes.Account(user))
     for i in item_list:
-        give_item(user, i, 0)
+        get_account(user).give_item(i, 0)
+    get_account(user).give_item('point', 5)
 
+
+def message_spaces(message):
+    spaces = []
+    index = 0
+    for ch in message.content:
+        if ch == ' ':
+            spaces.append(index)
+        index += 1
+    return spaces
 
 async def show_leaderboard(message):
     text = ':checkered_flag: __**Leaderboard**__ :checkered_flag: \n'
     values = {}
-    for user in accounts:
+    for user in classes.accounts:
         value = 0
-        for item in accounts[user]:
-            value += accounts[user][item] * item_list[item]
-        values[user] = value
+        for item in user.items:
+            value += user.items[item].amount * item_list[item]
+        values[user.name] = value
 
     sorted_account_values = sorted(values.items(), key=operator.itemgetter(1))
     sorted_account_values.reverse()
     index = 0;
     for user in sorted_account_values:
         text += ' \n**' + str(user[0][:-5]) + '\'s account:**\n'
-        text += str(accounts[str(user[0])]['point']) + ' ' + 'point'
-        if accounts[str(user[0])]['point'] == 1:
+
+        text += str(get_account(str(user[0])).items['point'].amount) + ' ' + 'point'
+        if get_account(str(user[0])).items['point'].amount == 1:
             text += ' \n'
         else:
             text += 's\n'
@@ -514,18 +349,5 @@ async def show_shop(message):
     for item in item_list:
         text += ' \n' + item[0].upper() + item[1:] + ': ' + str(item_list[item]) + ' points'
     await client.send_message(message.channel, text)
-
-async def send_random_image(message):
-    files = glob.glob(vault_root + '/*.png')
-    files += glob.glob(vault_root + '/*.jpg')
-    file_index = random.randint(0, len(files))
-    await client.send_file(message.channel, files[file_index])
-    if files[file_index][len(vault_root) + 1:] in eli_list:
-        await client.send_message(message.channel, 'Wow! You found a rare Eli!')
-        give_item(str(message.author), 'eli', 1)
-    elif files[file_index][len(vault_root) + 1:] in rock_list:
-        await client.send_message(message.channel, 'Wow! You found a rare small smiling stone face!')
-        give_item(str(message.author), 'small smiling stone face', 1)
-
 
 client.run('MjU4MDA0MjM1OTAyMjU1MTA1.DIda-g.j6b0db-C-vg1MAkAqpxtbDw1hw4')
