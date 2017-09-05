@@ -1,3 +1,4 @@
+from __future__ import unicode_literals
 import os
 import random
 import datetime
@@ -5,6 +6,7 @@ from abc import ABCMeta, abstractmethod
 from urllib.request import Request, urlopen
 from pathlib import Path
 import glob
+import youtube_dl
 import discord
 import operator
 import pickle
@@ -15,6 +17,8 @@ logging.basicConfig(level=logging.INFO)
 
 client = discord.Client()
 classes.client = client
+
+
 prefix = '!'
 item_list = {'point': 1, 'high-res blue dragon': 5, 'meme': 10, 'eli': 25, 'small smiling stone face': 50}
 eli_list = ['eli.png', 'eli_2.png', 'eli_3.png', 'eli_soren.png', 'real_eli.png', 'year_of_the_rooster.png', 'eli_2.jpg']
@@ -37,6 +41,7 @@ else:
 
 @client.event
 async def on_ready():
+    #await discord.opus.load_opus()
     print('Logged in as')
     print(client.user.name)
     print(client.user.id)
@@ -130,6 +135,37 @@ async def on_message(message):
         if len(message.content) > 6:
             game = message.content[6:]
             await client.send_message(message.channel, content=(game + 'aborky'), tts=True)
+    elif message.content.startswith(prefix + 'yt'):
+        if message.author.voice.voice_channel is not None:
+            if len(message.content) > 3:
+                if client.server_voice_state.voice_channel is not None:
+                    client.voice_client_in(discord.Server).disconnect()
+                url = message.content[4:]
+                ydl_opts = {
+                    'format': 'bestaudio/best',
+                    'outtmpl': 'J:/Vault/%(title)s.%(ext)s',
+                    'postprocessors': [{
+                        'key': 'FFmpegExtractAudio',
+                        'preferredcodec': 'mp3',
+                        'preferredquality': '192',
+                    }],
+                }
+                file_name = ''
+                with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    file_name = ydl.prepare_filename(info)
+                    file_name = file_name[:-4] + '.mp3'
+                    ydl.download([url])
+
+
+                voice = await client.join_voice_channel(message.author.voice.voice_channel)
+                player = voice.create_ffmpeg_player(file_name)
+                player.start()
+            else:
+                await client.send_message(message.channel, 'Error. Please enter a url')
+        else:
+            await client.send_message(message.channel, 'Error. You must be in a voice channel to use !yt')
+
     else:
         reply = await client.wait_for_message()
         if len(reply.attachments) > 0 and str(reply.author) != 'Points Bot#7331':
