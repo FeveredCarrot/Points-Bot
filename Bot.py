@@ -28,6 +28,8 @@ rock_list = ['small_smiling_face.jpg']
 vault_path = 'J:/Vault'
 vault_root = vault_path
 
+voice = None
+
 bank_file = vault_root + '/Points/bank.txt'
 file = open(bank_file, 'rb')
 
@@ -138,12 +140,19 @@ async def on_message(message):
     elif message.content.startswith(prefix + 'yt'):
         if message.author.voice.voice_channel is not None:
             if len(message.content) > 3:
-                if client.server_voice_state.voice_channel is not None:
-                    client.voice_client_in(discord.Server).disconnect()
+                global voice
+                print(voice)
+                if client.is_voice_connected(message.author.server):
+                    print('Disconnecting')
+                    for x in client.voice_clients:
+                        if x.server == message.server:
+                            await x.disconnect()
+                            break
+
                 url = message.content[4:]
                 ydl_opts = {
                     'format': 'bestaudio/best',
-                    'outtmpl': 'J:/Vault/%(title)s.%(ext)s',
+                    'outtmpl': vault_root + '/%(title)s.%(ext)s',
                     'postprocessors': [{
                         'key': 'FFmpegExtractAudio',
                         'preferredcodec': 'mp3',
@@ -154,12 +163,13 @@ async def on_message(message):
                 with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(url, download=False)
                     file_name = ydl.prepare_filename(info)
-                    file_name = file_name[:-4] + '.mp3'
+                    file_name = file_name[:-4] + 'mp3'
+                    await client.send_message(message.channel, 'Downloading: ' + file_name[len(vault_root) + 1: -4])
                     ydl.download([url])
-
 
                 voice = await client.join_voice_channel(message.author.voice.voice_channel)
                 player = voice.create_ffmpeg_player(file_name)
+                await client.send_message(message.channel, 'Playing ' + file_name[len(vault_root) + 1: -4])
                 player.start()
             else:
                 await client.send_message(message.channel, 'Error. Please enter a url')

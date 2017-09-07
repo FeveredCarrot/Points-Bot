@@ -281,7 +281,7 @@ class Point(object):
                 if account_not_in_list(str(reply.mentions[0])):
                     create_account(str(reply.mentions[0]))
                 get_account(str(reply.mentions[0])).give_item('point', 1)
-                self.user.give_item('point', -1)
+                self.amount -= 1
                 await client.send_message(message.channel, 'Gave 1 point to ' + str(reply.mentions[0])[:-5])
             else:
                 await client.send_message(message.channel, 'Error. Please enter an @mention of who you want to receive the point')
@@ -300,6 +300,7 @@ class HighResBlueDragon(object):
 
     async def use(self, message):
         await client.send_file(message.channel, vault_root + '/high_res_blue_dragon.jpg')
+        self.amount -= 1
 
 
 class Eli(object):
@@ -312,6 +313,7 @@ class Eli(object):
 
     async def use(self, message):
         await client.send_file(message.channel, vault_root + '/' + eli_list[random.randint(0, len(eli_list))])
+        self.amount -= 1
 
 
 class Meme(object):
@@ -326,6 +328,7 @@ class Meme(object):
     async def use(self, message):
         await client.send_message(message.channel, 'Here is your meme, ' + self.user.name[:-5])
         await self.user.send_random_image(message)
+        self.amount -= 1
 
 
 class SmallSmilingStoneFace(object):
@@ -338,5 +341,6 @@ class SmallSmilingStoneFace(object):
 
     async def use(self, message):
         await client.send_file(message.channel, vault_root + '/' + rock_list[random.randint(0, len(rock_list))])
+        self.amount -= 1
 
 #client.run('MjU4MDA0MjM1OTAyMjU1MTA1.DIda-g.j6b0db-C-vg1MAkAqpxtbDw1hw4')
