@@ -12,13 +12,14 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 
-
 prefix = '!'
-item_list = {'point': 1, 'high-res blue dragon': 5, 'meme': 10, 'eli': 25, 'small smiling stone face': 50}
-eli_list = ['eli.png', 'eli_2.png', 'eli_3.png', 'eli_soren.png', 'real_eli.png', 'year_of_the_rooster.png', 'eli_2.jpg']
-rock_list = ['small_smiling_face.jpg']
 
-#vault_path = '/home/pi/Desktop/Vault'
+eli_list = ['eli.png', 'eli_2.png', 'eli_3.png', 'eli_soren.png', 'real_eli.png', 'year_of_the_rooster.png',
+            'eli_2.jpg']
+rock_list = ['small_smiling_face.jpg', 'magik.png',
+             'eJwFwdsNwyAMAMBdGABT8wjONhQQSZXUCLtfVXfv3dd81mV2c6hO2QHaKZVXs6K8yuh2MI-rl3mKrXxDUS31uPtbBTYXCR2lEDLm.jpg']
+
+# vault_path = '/home/pi/Desktop/Vault'
 vault_path = 'J:\Vault'
 vault_root = vault_path
 bank_file = vault_root + '/Points/bank.txt'
@@ -27,10 +28,12 @@ accounts = []
 
 client = discord.Client()
 
+
 def get_account(user):
-    for i in accounts:
-        if i.name == user:
-            return i
+    for account in accounts:
+        if account.name == user:
+            return account
+
 
 def account_not_in_list(user):
     for i in accounts:
@@ -38,12 +41,14 @@ def account_not_in_list(user):
             return False
     return True
 
+
 def create_account(user):
     print('Setting up account for ' + user)
     accounts.append(Account(user))
-    for i in item_list:
-        get_account(user).give_item(i, 0)
+    for item in item_list:
+        get_account(user).give_item(item, 0)
     get_account(user).give_item('point', 5)
+
 
 async def show_leaderboard(message):
     text = ':checkered_flag: __**Leaderboard**__ :checkered_flag: \n'
@@ -52,12 +57,12 @@ async def show_leaderboard(message):
         value = 0
         for item in user.items:
             print(item_list[item])
-            value += user.items[item].amount * item_list[item]
+            value += user.items[item].amount * item_list[item].value
         values[user.name] = value
 
     sorted_account_values = sorted(values.items(), key=operator.itemgetter(1))
     sorted_account_values.reverse()
-    index = 0;
+    index = 0
     for user in sorted_account_values:
         text += ' \n**' + str(user[0][:-5]) + '\'s account:**\n'
 
@@ -86,14 +91,14 @@ def message_spaces(message):
 
 
 class Account(object):
-
     def __init__(self, user):
         self.name = user
         self.items = {}
         self.last_payday = datetime.datetime.utcnow() - datetime.timedelta(days=1)
 
     def give_item(self, thing, amount):
-        class_names = {'point': 'Point', 'high-res blue dragon': 'HighResBlueDragon', 'eli': 'Eli', 'meme': 'Meme', 'small smiling stone face': 'SmallSmilingStoneFace'}
+        class_names = {'point': 'Point', 'high-res blue dragon': 'HighResBlueDragon', 'eli': 'Eli', 'meme': 'Meme',
+                       'small smiling stone face': 'SmallSmilingStoneFace'}
         if thing in self.items:
             self.items[thing].amount += amount
         else:
@@ -115,24 +120,25 @@ class Account(object):
                 create_account(str(message.mentions[0]))
 
             recipient = get_account(str(message.mentions[0]))
-            print('recipient:' + str(recipient))
+            print('recipient:' + str(message.mentions[0]))
             print('vendor:' + str(message.author))
-            #space_counter = 0
+            # space_counter = 0
             amount_space = 0
             item_space = 0
-
 
             spaces = message_spaces(message)
             if len(spaces) >= 2:
                 amount_space = spaces[1]
                 item_space = spaces[2]
             else:
-                await client.send_message(message.channel, 'Error. You did it wrong, dumbass. The correct way is \"!give [@user] [amount] [item]\"')
+                await client.send_message(message.channel,
+                                          'Error. You did it wrong, dumbass. The correct way is \"!give [@user] [amount] [item]\"')
                 return
 
             if (amount_space == 0 or item_space == 0) or (
-                    message.content[amount_space + 1] == ' ' or message.content[item_space + 1] == ' '):
-                await client.send_message(message.channel, 'Error. You did it wrong, dumbass. The correct way is \"!give [@user] [amount] [item]\"')
+                            message.content[amount_space + 1] == ' ' or message.content[item_space + 1] == ' '):
+                await client.send_message(message.channel,
+                                          'Error. You did it wrong, dumbass. The correct way is \"!give [@user] [amount] [item]\"')
                 return
             else:
                 amount = int(message.content[amount_space + 1:item_space])
@@ -142,15 +148,25 @@ class Account(object):
 
                 if item in self.items:
                     if self.items[item].amount >= amount:
-                        self.give_item(item, amount)
+                        self.give_item(item, 0 - amount)
                         recipient.give_item(item, amount)
-                        await show_leaderboard(message)
+                        if amount == 1:
+                            await client.send_message(message.channel,
+                                                      'Gave ' + str(amount) + ' ' + item + ' to ' + str(
+                                                          message.mentions[0])[:-5])
+                        else:
+                            await client.send_message(message.channel,
+                                                      'Gave ' + str(amount) + ' ' + item + 's to ' + str(
+                                                          message.mentions[0])[:-5])
                     else:
-                        await client.send_message(message.channel, 'Sorry, ' + self.name[:-5] + ', you don\'t have enough ' + item + 's to give.')
+                        await client.send_message(message.channel, 'Sorry, ' + self.name[
+                                                                               :-5] + ', you don\'t have enough ' + item + 's to give.')
                 else:
-                    await client.send_message(message.channel, 'Sorry, ' + self.name[:-5] + ', you don\'t have any ' + item + 's to give.')
+                    await client.send_message(message.channel, 'Sorry, ' + self.name[
+                                                                           :-5] + ', you don\'t have any ' + item + 's to give.')
         else:
-            await client.send_message(message.channel, 'Error. You did it wrong, dumbass. The correct way is \"!give [@user] [amount] [item]\"')
+            await client.send_message(message.channel,
+                                      'Error. You did it wrong, dumbass. The correct way is \"!give [@user] [amount] [item]\"')
 
     async def buy_item(self, message):
         space_counter = 0
@@ -166,8 +182,10 @@ class Account(object):
                     item_space = index
             index += 1
 
-        if (amount_space == 0 or item_space == 0) or (message.content[amount_space + 1] == ' ' or message.content[item_space + 1] == ' '):
-            await client.send_message(message.channel, 'Error. You did it wrong, retard. The correct way is \"!buy [amount] [item]\"')
+        if (amount_space == 0 or item_space == 0) or (
+                message.content[amount_space + 1] == ' ' or message.content[item_space + 1] == ' '):
+            await client.send_message(message.channel,
+                                      'Error. You did it wrong, retard. The correct way is \"!buy [amount] [item]\"')
             return
         else:
             amount = int(message.content[amount_space:item_space])
@@ -180,17 +198,19 @@ class Account(object):
             if message.content[-1] == 's':
                 item = message.content[item_space + 1: -1]
 
-        if self.items['point'].amount >= item_list[item] * amount:
-            self.give_item('point', (0 - item_list[item]) * amount)
+        if self.items['point'].amount >= item_list[item].value * amount:
+            self.give_item('point', (0 - item_list[item].value) * amount)
             self.give_item(item, amount)
             if amount == 1:
                 await client.send_message(message.channel, 'Transaction complete. You bought 1 ' + item)
             else:
-                await client.send_message(message.channel, 'Transaction complete. You bought ' + str(amount) + ' ' + item + 's')
+                await client.send_message(message.channel,
+                                          'Transaction complete. You bought ' + str(amount) + ' ' + item + 's')
         elif amount == 1:
             await client.send_message(message.channel, 'Sorry, you don\'t have enough points to buy any ' + item + 's')
         else:
-            await client.send_message(message.channel, 'Sorry, you don\'t have enough points to buy ' + str(amount) + ' ' + item + 's')
+            await client.send_message(message.channel,
+                                      'Sorry, you don\'t have enough points to buy ' + str(amount) + ' ' + item + 's')
 
     async def sell_item(self, message):
         space_counter = 0
@@ -206,8 +226,10 @@ class Account(object):
                     item_space = index
             index += 1
 
-        if (amount_space == 0 or item_space == 0) or (message.content[amount_space + 1] == ' ' or message.content[item_space + 1] == ' '):
-            await client.send_message(message.channel, 'Error. You did it wrong, retard. The correct way is \"!sell [amount] [item]\"')
+        if (amount_space == 0 or item_space == 0) or (
+                message.content[amount_space + 1] == ' ' or message.content[item_space + 1] == ' '):
+            await client.send_message(message.channel,
+                                      'Error. You did it wrong, retard. The correct way is \"!sell [amount] [item]\"')
             return
         else:
             amount = int(message.content[amount_space:item_space])
@@ -222,13 +244,16 @@ class Account(object):
 
         if item in self.items:
             if self.items[item].amount >= amount:
-                self.give_item('point', item_list[item] * amount)
+                self.give_item('point', item_list[item].value * amount)
                 self.give_item(item, 0 - amount)
 
                 if amount == 1:
-                    await client.send_message(message.channel, 'Transaction complete. You sold a ' + item + ' for ' + str(item_list[item]) + 'points')
+                    await client.send_message(message.channel,
+                                              'Transaction complete. You sold a ' + item + ' for ' + str(
+                                                  item_list[item].value) + 'points')
                 else:
-                    await client.send_message(message.channel, 'Transaction complete. You sold ' + str(amount) + ' ' + item + 's for ' + str(item_list[item] * amount) + ' points')
+                    await client.send_message(message.channel, 'Transaction complete. You sold ' + str(
+                        amount) + ' ' + item + 's for ' + str(item_list[item].value * amount) + ' points')
             else:
                 await client.send_message(message.channel, 'Sorry, you don\'t have enough ' + item + '\'s to sell')
         else:
@@ -257,21 +282,22 @@ class Account(object):
         self.give_item(item, amount)
         return [item, amount]
 
-class Item(object):
 
-    def __init__(self, user):
-        self.user = user
-        self.amount = 0
-        self.value = item_list[self.name]
+# class Item(object):
+#
+#     def __init__(self, user):
+#         self.user = user
+#         self.amount = 0
+#         self.value = item_list[self.name]
 
 
 class Point(object):
-
-    def __init__(self, user):
+    def __init__(self, user=None):
         self.name = 'point'
+        self.emoji = '💲'
         self.user = user
         self.amount = 0
-        self.value = item_list[self.name]
+        self.value = 1
 
     async def use(self, message):
         if self.amount > 0:
@@ -284,19 +310,20 @@ class Point(object):
                 self.amount -= 1
                 await client.send_message(message.channel, 'Gave 1 point to ' + str(reply.mentions[0])[:-5])
             else:
-                await client.send_message(message.channel, 'Error. Please enter an @mention of who you want to receive the point')
+                await client.send_message(message.channel,
+                                          'Error. Please enter an @mention of who you want to receive the point')
                 return
         else:
             await client.send_message(message.channel, 'Error. You don\'t have any points')
 
 
 class HighResBlueDragon(object):
-
     def __init__(self, user):
         self.name = 'high-res blue dragon'
+        self.emoji = '<:highresbluedragon:230821355048665088>'
         self.user = user
         self.amount = 0
-        self.value = item_list[self.name]
+        self.value = 5
 
     async def use(self, message):
         await client.send_file(message.channel, vault_root + '/high_res_blue_dragon.jpg')
@@ -304,12 +331,12 @@ class HighResBlueDragon(object):
 
 
 class Eli(object):
-
     def __init__(self, user):
         self.name = 'eli'
+        self.emoji = '<:eli:260175191563436043>'
         self.user = user
         self.amount = 0
-        self.value = item_list[self.name]
+        self.value = 25
 
     async def use(self, message):
         await client.send_file(message.channel, vault_root + '/' + eli_list[random.randint(0, len(eli_list))])
@@ -317,13 +344,12 @@ class Eli(object):
 
 
 class Meme(object):
-
     def __init__(self, user):
         self.name = 'meme'
+        self.emoji = '<:guy:293564958187323393>'
         self.user = user
         self.amount = 0
-        self.value = item_list[self.name]
-
+        self.value = 20
 
     async def use(self, message):
         await client.send_message(message.channel, 'Here is your meme, ' + self.user.name[:-5])
@@ -332,15 +358,17 @@ class Meme(object):
 
 
 class SmallSmilingStoneFace(object):
-
     def __init__(self, user):
         self.name = 'small smiling stone face'
+        self.emoji = '<:smallsmilingstoneface:279073816049876992>'
         self.user = user
         self.amount = 0
-        self.value = item_list[self.name]
+        self.value = 50
 
     async def use(self, message):
         await client.send_file(message.channel, vault_root + '/' + rock_list[random.randint(0, len(rock_list))])
         self.amount -= 1
 
-#client.run('MjU4MDA0MjM1OTAyMjU1MTA1.DIda-g.j6b0db-C-vg1MAkAqpxtbDw1hw4')
+
+item_list = {'point': Point(None), 'high-res blue dragon': HighResBlueDragon(None), 'meme': Meme(None),
+             'eli': Eli(None), 'small smiling stone face': SmallSmilingStoneFace(None)}

@@ -2,13 +2,18 @@ from __future__ import unicode_literals
 import os
 import random
 import datetime
+import asyncio
 from abc import ABCMeta, abstractmethod
 from urllib.request import Request, urlopen
 from pathlib import Path
 import glob
+import subprocess
+import re
+from decimal import Decimal
 import youtube_dl
 import discord
 import operator
+from xml.dom.minidom import parseString
 import pickle
 import classes
 import logging
@@ -20,15 +25,19 @@ classes.client = client
 
 
 prefix = '!'
-item_list = {'point': 1, 'high-res blue dragon': 5, 'meme': 10, 'eli': 25, 'small smiling stone face': 50}
+item_list = {'point': classes.Point(None), 'high-res blue dragon': classes.HighResBlueDragon(None),
+             'meme': classes.Meme(None), 'eli': classes.Eli(None),
+             'small smiling stone face': classes.SmallSmilingStoneFace(None)}
+#item_list = {'point': 1, 'high-res blue dragon': 5, 'meme': 10, 'eli': 25, 'small smiling stone face': 50}
 eli_list = ['eli.png', 'eli_2.png', 'eli_3.png', 'eli_soren.png', 'real_eli.png', 'year_of_the_rooster.png', 'eli_2.jpg']
-rock_list = ['small_smiling_face.jpg']
+rock_list = ['small_smiling_face.jpg', 'magik.png', 'eJwFwdsNwyAMAMBdGABT8wjONhQQSZXUCLtfVXfv3dd81mV2c6hO2QHaKZVXs6K8yuh2MI-rl3mKrXxDUS31uPtbBTYXCR2lEDLm.jpg']
 
 #vault_path = '/home/pi/Desktop/Vault'
 vault_path = 'J:/Vault'
 vault_root = vault_path
 
 voice = None
+shop_open = False
 
 bank_file = vault_root + '/Points/bank.txt'
 file = open(bank_file, 'rb')
@@ -37,7 +46,7 @@ if len(file.read()) > 0:
     file.close()
     with open(bank_file, 'rb') as f:
         classes.accounts = pickle.load(f)
-    print(classes.accounts)
+    #print(classes.accounts)
 else:
     file.close()
 
@@ -141,7 +150,6 @@ async def on_message(message):
         if message.author.voice.voice_channel is not None:
             if len(message.content) > 3:
                 global voice
-                print(voice)
                 if client.is_voice_connected(message.author.server):
                     print('Disconnecting')
                     for x in client.voice_clients:
@@ -165,12 +173,20 @@ async def on_message(message):
                     file_name = ydl.prepare_filename(info)
                     file_name = file_name[:-4] + 'mp3'
                     await client.send_message(message.channel, 'Downloading: ' + file_name[len(vault_root) + 1: -4])
+                    # info_dict = ydl.extract_info(url=url, download=False)
                     ydl.download([url])
 
                 voice = await client.join_voice_channel(message.author.voice.voice_channel)
                 player = voice.create_ffmpeg_player(file_name)
                 await client.send_message(message.channel, 'Playing ' + file_name[len(vault_root) + 1: -4])
                 player.start()
+                # audio_length = player.duration
+                # asyncio.sleep(audio_length)
+                # print('Video finished: ' + str(audio_length))
+                # for x in client.voice_clients:
+                #     if x.server == message.server:
+                #         await x.disconnect()
+                #         return
             else:
                 await client.send_message(message.channel, 'Error. Please enter a url')
         else:
@@ -331,6 +347,11 @@ def get_containing_folder(path):
     vault_path = path[:index]
 
 
+def get_length(player):
+    while player.is_stopped() != True:
+        asyncio.sleep(5)
+        print('Player not stopped')
+
 def get_account(user):
     for i in classes.accounts:
         if i.name == user:
@@ -361,13 +382,14 @@ def message_spaces(message):
         index += 1
     return spaces
 
+
 async def show_leaderboard(message):
     text = ':checkered_flag: __**Leaderboard**__ :checkered_flag: \n'
     values = {}
     for user in classes.accounts:
         value = 0
         for item in user.items:
-            value += user.items[item].amount * item_list[item]
+            value += user.items[item].amount * item_list[item].value
         values[user.name] = value
 
     sorted_account_values = sorted(values.items(), key=operator.itemgetter(1))
@@ -391,9 +413,54 @@ async def show_leaderboard(message):
 
 
 async def show_shop(message):
+    global shop_open
+    if shop_open:
+        shop_open = False
+
     text = ':moneybag: Shop :moneybag: \n'
     for item in item_list:
-        text += ' \n' + item[0].upper() + item[1:] + ': ' + str(item_list[item]) + ' points'
-    await client.send_message(message.channel, text)
+        text += ' \n' + item_list[item].emoji + ' ' + item[0].upper() + item[1:] + ': ' + str(item_list[item].value) + ' points'
+    text += '\n \nClick on an item react to buy it'
+    client_message = await client.send_message(message.channel, text)
+
+    for item in item_list:
+        emoji_index = 0
+        index = 0
+        for i in message.server.emojis:
+            if str(i) == item_list[item].emoji:
+                emoji_index = index
+                break
+            index += 1
+        await client.add_reaction(client_message, message.server.emojis[emoji_index])
+
+    await asyncio.sleep(0.5)
+    emoji_list = {}
+    for item in item_list:
+        emoji_list[item_list[item].emoji] = item_list[item]
+    shop_open = True
+
+    while True:
+        reply = await client.wait_for_reaction(emoji=None)
+
+        if not shop_open:
+            return
+        if reply is None:
+            print('bad')
+            return
+        if str(reply[0].emoji) in emoji_list:
+            user = str(reply[1])
+            emoji = str(reply[0].emoji)
+            if classes.account_not_in_list(user):
+                create_account(user)
+
+            user_account = classes.get_account(user)
+            if user_account.items['point'].amount >= emoji_list[emoji].value:
+                user_account.give_item(emoji_list[emoji].name, 1)
+                user_account.give_item('point', 0 - emoji_list[emoji].value)
+                await client.send_message(message.channel, 'Transaction complete. ' + user_account.name[:-5] + ' bought 1 ' + emoji_list[emoji].name)
+            else:
+                await client.send_message(message.channel, 'Sorry, ' + user_account.name[:-5] + ', you don\'t have enough points to buy any ' + emoji_list[emoji].name + 's')
+        else:
+            print('something went wrong')
 
 client.run('MjU4MDA0MjM1OTAyMjU1MTA1.DIda-g.j6b0db-C-vg1MAkAqpxtbDw1hw4')
