@@ -1,58 +1,39 @@
 from __future__ import unicode_literals
-import os
-import random
-import datetime
+
 import asyncio
-from abc import ABCMeta, abstractmethod
-from urllib.request import Request, urlopen
-from pathlib import Path
-import glob
-import subprocess
-import re
-from decimal import Decimal
-import youtube_dl
-import discord
-import operator
-from xml.dom.minidom import parseString
-import pickle
-import classes
+import datetime
 import logging
+import operator
+import os
+from pathlib import Path
+from urllib.request import Request, urlopen
+
+import discord
+import youtube_dl
+
+import classes
 
 logging.basicConfig(level=logging.INFO)
 
 client = discord.Client()
 classes.client = client
 
-
 prefix = '!'
-item_list = {'point': classes.Point(None), 'high-res blue dragon': classes.HighResBlueDragon(None),
-             'meme': classes.Meme(None), 'eli': classes.Eli(None),
-             'small smiling stone face': classes.SmallSmilingStoneFace(None)}
-#item_list = {'point': 1, 'high-res blue dragon': 5, 'meme': 10, 'eli': 25, 'small smiling stone face': 50}
-eli_list = ['eli.png', 'eli_2.png', 'eli_3.png', 'eli_soren.png', 'real_eli.png', 'year_of_the_rooster.png', 'eli_2.jpg']
-rock_list = ['small_smiling_face.jpg', 'magik.png', 'eJwFwdsNwyAMAMBdGABT8wjONhQQSZXUCLtfVXfv3dd81mV2c6hO2QHaKZVXs6K8yuh2MI-rl3mKrXxDUS31uPtbBTYXCR2lEDLm.jpg']
+item_list = classes.item_list
+eli_list = classes.eli_list
+rock_list = classes.rock_list
 
-#vault_path = '/home/pi/Desktop/Vault'
-vault_path = 'J:/Vault'
+vault_path = '/home/pi/Desktop/Vault'
+# vault_path = 'J:/Vault'
 vault_root = vault_path
 
 voice = None
 shop_open = False
 
-bank_file = vault_root + '/Points/bank.txt'
-file = open(bank_file, 'rb')
-
-if len(file.read()) > 0:
-    file.close()
-    with open(bank_file, 'rb') as f:
-        classes.accounts = pickle.load(f)
-    #print(classes.accounts)
-else:
-    file.close()
 
 @client.event
 async def on_ready():
-    #await discord.opus.load_opus()
+    # await discord.opus.load_opus()
     print('Logged in as')
     print(client.user.name)
     print(client.user.id)
@@ -62,14 +43,17 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-
     user_name = str(message.author)
+    user_account = classes.get_account(user_name)
+
     if message.content.startswith(prefix):
         if not account_in_list(user_name):
-            create_account(str(message.author))
+            classes.create_account(str(message.author))
 
     if message.content.startswith(prefix + 'hey'):
         await client.send_message(message.channel, 'HEY GAMERS')
+    elif message.content.startswith(prefix + 'bork'):
+        await client.send_message(message.channel, 'eeyaborky', tts=True)
     elif message.content.startswith(prefix + 'vault'):
         # if Path(vault_path).exists():
         if False:
@@ -77,50 +61,79 @@ async def on_message(message):
         else:
             await client.send_message(message.channel, 'Sorry, the vault is GONE')
             return
-    elif message.content.startswith(prefix + 'give'):
-        await get_account(user_name).give(message)
+    elif message.content.startswith(prefix + 'gayzone'):
+        if len(message.mentions) > 0:
+            if message.mentions[0].voice.voice_channel is None:
+                await client.send_message(message.channel,
+                                          'Error, target user must be in a voice channel to be GAYZONED')
+                return
+            else:
+                for channel in message.author.server.channels:
+                    if channel.name == 'Gay Zone':
+                        await client.move_member(message.mentions[0], channel)
+                        await client.send_message(message.channel,
+                                                  'Get GAYZONED, ' + str(message.mentions[0])[:-5] + '!')
+                        return
+
+        else:
+            await client.send_message(message.channel, 'Error, please enter an @mention of the person to be Gayzoned')
+
+    elif message.content.startswith(prefix + 'payday') and user_account.using_cipher is False:
+        # print((datetime.datetime.utcnow() - get_account(user_name).last_payday).total_seconds())
+        if (datetime.datetime.utcnow() - classes.get_account(user_name).last_payday).total_seconds() < 10800:
+            await client.send_message(message.channel, 'Sorry, you already got your items recently. Please wait ' + str(
+                int((10800 - (datetime.datetime.utcnow() - classes.get_account(
+                    user_name).last_payday).total_seconds()) / 60)) + ' more minutes and try again')
+            return
+        else:
+            classes.get_account(user_name).last_payday = datetime.datetime.utcnow()
+            stuff = await classes.get_account(user_name).give_random_item(3)
+            if stuff[1] == 1:
+                await client.send_message(message.channel, 'Cool, you found 1 ' + stuff[0])
+            else:
+                await client.send_message(message.channel, 'Cool, you found ' + str(stuff[1]) + ' ' + stuff[0] + 's')
+    elif message.content.startswith(prefix + 'play'):
+        if len(message.content) > 6:
+            game = message.content[6:]
+            await client.send_message(message.channel, content=(game + 'aborky'), tts=True)
+    elif message.channel.name != 'points-bot' and message.content.startswith(prefix):
+        await client.send_message(message.channel, 'Hey dumb-dumb, send bot commands in the points-bot channel')
+        return
+    elif message.content.startswith(prefix + 'give') and user_account.using_cipher is False:
+        await classes.get_account(user_name).give(message)
     elif message.content.startswith(prefix + 'leaderboard'):
         await show_leaderboard(message)
-    elif message.content.startswith(prefix + 'use'):
+    elif message.content.startswith(prefix + 'use') and user_account.using_cipher is False:
         spaces = message_spaces(message)
 
         if len(spaces) > 0:
             item = message.content[spaces[0] + 1:]
+            if len(spaces) > 1:
+                item = message.content[spaces[0] + 1: spaces[1]]
+
             if item not in item_list:
                 await client.send_message(message.channel, 'Error. Not a valid item')
                 return
-            await get_account(user_name).use_item(message, item)
+            await classes.get_account(user_name).use_item(message, item)
         else:
             await client.send_message(message.channel, 'Error. Please enter an item to use')
             return
 
-    elif message.content.startswith(prefix + 'payday'):
-            print((datetime.datetime.utcnow() - get_account(user_name).last_payday).total_seconds())
-            if (datetime.datetime.utcnow() - get_account(user_name).last_payday).total_seconds() < 10800:
-                await client.send_message(message.channel, 'Sorry, you already got your items recently. Please wait ' + str(int((10800 - (datetime.datetime.utcnow() - get_account(user_name).last_payday).total_seconds()) / 60)) + ' more minutes and try again')
-                return
-            else:
-                get_account(user_name).last_payday = datetime.datetime.utcnow()
-                stuff = await get_account(user_name).give_random_item(message, 3)
-                if stuff[1] == 1:
-                    await client.send_message(message.channel, 'Cool, you found 1 ' + stuff[0])
-                else:
-                    await client.send_message(message.channel, 'Cool, you found ' + str(stuff[1]) + ' ' + stuff[0] + 's')
-
-    elif message.content.startswith(prefix + 'buy'):
+    elif message.content.startswith(prefix + 'buy') and user_account.using_cipher is False:
         if len(message.content) > 5:
-            await get_account(user_name).buy_item(message)
+            await classes.get_account(user_name).buy_item(message)
         else:
-            await client.send_message(message.channel, 'Error. You did it wrong, retard. The correct way is \"!buy [amount] [item]\"')
+            await client.send_message(message.channel,
+                                      'Error. You did it wrong, retard. The correct way is \"!buy [amount] [item]\"')
             return
-    elif message.content.startswith(prefix + 'sell'):
+    elif message.content.startswith(prefix + 'sell') and user_account.using_cipher is False:
         if len(message.content) > 6:
-            await get_account(user_name).sell_item(message)
+            await classes.get_account(user_name).sell_item(message)
         else:
-            await client.send_message(message.channel, 'Error. You did it wrong, retard. The correct way is \"!buy [amount] [item]\"')
+            await client.send_message(message.channel,
+                                      'Error. You did it wrong, retard. The correct way is \"!buy [amount] [item]\"')
             return
-    elif message.content.startswith(prefix + 'account'):
-        spaces = message_spaces(message)
+    elif message.content.startswith(prefix + 'account') and user_account.using_cipher is False:
         user = user_name
 
         if len(message.mentions) > 0:
@@ -132,23 +145,19 @@ async def on_message(message):
 
         text = user[:-5] + '\'s items:\n \n'
         if not account_in_list(user_name):
-            create_account(str(message.author))
-        for item in get_account(user).items:
-            text += str(get_account(user).items[item].amount) + ' ' + item
-            if get_account(user_name).items[item].amount == 1:
+            classes.create_account(str(message.author))
+        for item in classes.get_account(user).items:
+            text += str(classes.get_account(user).items[item].amount) + ' ' + item
+            if classes.get_account(user_name).items[item].amount == 1:
                 text += ' \n'
             else:
                 text += 's\n'
         await client.send_message(message.channel, text)
     elif message.content.startswith(prefix + 'shop'):
         await show_shop(message)
-    elif message.content.startswith(prefix + 'play'):
-        if len(message.content) > 6:
-            game = message.content[6:]
-            await client.send_message(message.channel, content=(game + 'aborky'), tts=True)
     elif message.content.startswith(prefix + 'yt'):
         if message.author.voice.voice_channel is not None:
-            if len(message.content) > 3:
+            if message.content.startswith(prefix + 'yt https://www.youtube.com/watch?v='):
                 global voice
                 if client.is_voice_connected(message.author.server):
                     print('Disconnecting')
@@ -167,11 +176,10 @@ async def on_message(message):
                         'preferredquality': '192',
                     }],
                 }
-                file_name = ''
                 with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(url, download=False)
                     file_name = ydl.prepare_filename(info)
-                    file_name = file_name[:-4] + 'mp3'
+                    file_name = file_name[:-4] + '.mp3'
                     await client.send_message(message.channel, 'Downloading: ' + file_name[len(vault_root) + 1: -4])
                     # info_dict = ydl.extract_info(url=url, download=False)
                     ydl.download([url])
@@ -188,10 +196,12 @@ async def on_message(message):
                 #         await x.disconnect()
                 #         return
             else:
-                await client.send_message(message.channel, 'Error. Please enter a url')
+                await client.send_message(message.channel, 'Error. Please enter a valid url')
         else:
             await client.send_message(message.channel, 'Error. You must be in a voice channel to use !yt')
-
+    elif message.content.startswith(prefix + 'heist'):
+        heist = classes.Heist()
+        await heist.start_heist(message)
     else:
         reply = await client.wait_for_message()
         if len(reply.attachments) > 0 and str(reply.author) != 'Points Bot#7331':
@@ -234,8 +244,8 @@ async def the_vault(message):
                                           'Files in ' + vault_path[len(vault_root) + 1:] + ':\n\n' + str(file_list))
 
         elif reply.content == "2":
-            isDone = False
-            while isDone == False:
+            is_done = False
+            while not is_done:
                 await client.send_message(message.channel,
                                           'Enter name of folder/file, or type \"stop\" to go back to menu')
                 reply = await client.wait_for_message(timeout=300, author=message.author)
@@ -280,7 +290,7 @@ async def the_vault(message):
             document = open(vault_path + '/' + reply.content + '.txt', "w")
             await client.send_message(message.channel, 'Enter document contents')
             reply = await client.wait_for_message(timeout=300, author=message.author)
-            document.write(reply.content);
+            document.write(reply.content)
             document.close()
 
         elif reply.content == "5":
@@ -307,7 +317,6 @@ async def the_vault(message):
 
         elif reply.content == "6":
             await client.send_message(message.channel, 'Goodbye')
-            stopped = True
             return
 
 
@@ -348,14 +357,9 @@ def get_containing_folder(path):
 
 
 def get_length(player):
-    while player.is_stopped() != True:
+    while not player.is_stopped():
         asyncio.sleep(5)
         print('Player not stopped')
-
-def get_account(user):
-    for i in classes.accounts:
-        if i.name == user:
-            return i
 
 
 def account_in_list(user):
@@ -363,14 +367,6 @@ def account_in_list(user):
         if i.name == user:
             return True
     return False
-
-
-def create_account(user):
-    print('Setting up account for ' + user)
-    classes.accounts.append(classes.Account(user))
-    for i in item_list:
-        get_account(user).give_item(i, 0)
-    get_account(user).give_item('point', 5)
 
 
 def message_spaces(message):
@@ -394,7 +390,7 @@ async def show_leaderboard(message):
 
     sorted_account_values = sorted(values.items(), key=operator.itemgetter(1))
     sorted_account_values.reverse()
-    index = 0;
+    index = 0
     for user in sorted_account_values:
         text += ' \n**' + str(user[0][:-5]) + '\'s account:**\n'
 
@@ -419,24 +415,28 @@ async def show_shop(message):
 
     text = ':moneybag: Shop :moneybag: \n'
     for item in item_list:
-        text += ' \n' + item_list[item].emoji + ' ' + item[0].upper() + item[1:] + ': ' + str(item_list[item].value) + ' points'
+        text += ' \n' + item_list[item].emoji + ' ' + item[0].upper() + item[1:] + ': ' + str(
+            item_list[item].value) + ' points'
     text += '\n \nClick on an item react to buy it'
     client_message = await client.send_message(message.channel, text)
 
     for item in item_list:
-        emoji_index = 0
+        emoji_index = None
         index = 0
         for i in message.server.emojis:
             if str(i) == item_list[item].emoji:
                 emoji_index = index
                 break
             index += 1
-        await client.add_reaction(client_message, message.server.emojis[emoji_index])
+        if emoji_index is None:
+            await client.add_reaction(client_message, item_list[item].emoji)
+        else:
+            await client.add_reaction(client_message, message.server.emojis[emoji_index])
 
     await asyncio.sleep(0.5)
-    emoji_list = {}
+    items = {}
     for item in item_list:
-        emoji_list[item_list[item].emoji] = item_list[item]
+        items[item_list[item].emoji] = item_list[item]
     shop_open = True
 
     while True:
@@ -447,20 +447,25 @@ async def show_shop(message):
         if reply is None:
             print('bad')
             return
-        if str(reply[0].emoji) in emoji_list:
+        if str(reply[0].emoji) in items:
             user = str(reply[1])
             emoji = str(reply[0].emoji)
             if classes.account_not_in_list(user):
-                create_account(user)
+                classes.create_account(user)
 
             user_account = classes.get_account(user)
-            if user_account.items['point'].amount >= emoji_list[emoji].value:
-                user_account.give_item(emoji_list[emoji].name, 1)
-                user_account.give_item('point', 0 - emoji_list[emoji].value)
-                await client.send_message(message.channel, 'Transaction complete. ' + user_account.name[:-5] + ' bought 1 ' + emoji_list[emoji].name)
+            if user_account.items['point'].amount >= items[emoji].value:
+                user_account.give_item(items[emoji].name, 1)
+                user_account.give_item('point', 0 - items[emoji].value)
+                await client.send_message(message.channel,
+                                          'Transaction complete. ' + user_account.name[:-5] + ' bought 1 ' + items[
+                                              emoji].name)
             else:
-                await client.send_message(message.channel, 'Sorry, ' + user_account.name[:-5] + ', you don\'t have enough points to buy any ' + emoji_list[emoji].name + 's')
+                await client.send_message(message.channel, 'Sorry, ' + user_account.name[
+                                                                       :-5] + ', you don\'t have enough points to buy any ' +
+                                          items[emoji].name + 's')
         else:
-            print('something went wrong')
+            print('Emoji not in emoji list')
+
 
 client.run('MjU4MDA0MjM1OTAyMjU1MTA1.DIda-g.j6b0db-C-vg1MAkAqpxtbDw1hw4')
