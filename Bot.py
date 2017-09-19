@@ -179,7 +179,10 @@ async def on_message(message):
                 with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(url, download=False)
                     file_name = ydl.prepare_filename(info)
-                    file_name = file_name[:-4] + '.mp3'
+                    if file_name[-4] == '.':
+                        file_name = file_name[:-4] + 'mp3'
+                    else:
+                        file_name = file_name[:-4] + '.mp3'
                     await client.send_message(message.channel, 'Downloading: ' + file_name[len(vault_root) + 1: -4])
                     # info_dict = ydl.extract_info(url=url, download=False)
                     ydl.download([url])
@@ -200,6 +203,8 @@ async def on_message(message):
         else:
             await client.send_message(message.channel, 'Error. You must be in a voice channel to use !yt')
     elif message.content.startswith(prefix + 'heist'):
+        global shop_open
+        shop_open = False
         heist = classes.Heist()
         await heist.start_heist(message)
     else:
@@ -394,8 +399,8 @@ async def show_leaderboard(message):
     for user in sorted_account_values:
         text += ' \n**' + str(user[0][:-5]) + '\'s account:**\n'
 
-        text += str(get_account(str(user[0])).items['point'].amount) + ' ' + 'point'
-        if get_account(str(user[0])).items['point'].amount == 1:
+        text += str(classes.get_account(str(user[0])).items['point'].amount) + ' ' + 'point'
+        if classes.get_account(str(user[0])).items['point'].amount == 1:
             text += ' \n'
         else:
             text += 's\n'

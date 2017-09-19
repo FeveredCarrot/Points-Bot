@@ -20,7 +20,7 @@ rock_list = ['small_smiling_face.jpg', 'magik.png',
              'eJwFwdsNwyAMAMBdGABT8wjONhQQSZXUCLtfVXfv3dd81mV2c6hO2QHaKZVXs6K8yuh2MI-rl3mKrXxDUS31uPtbBTYXCR2lEDLm.jpg']
 
 vault_root = '/home/pi/Desktop/Vault'
-#vault_root = 'J:/Vault'
+# vault_root = 'J:/Vault'
 vault_path = vault_root
 bank_file = vault_root + '/Points/bank.txt'
 
@@ -102,18 +102,21 @@ def message_spaces(message):
 
 
 class Heist(object):
+
     def __init__(self):
         self.heist_users = {}
-        self.heist_items = {'gun': 0, 'rope': 0, 'cipher': 0, 'tool': 0}
-        self.react_list = {'🔫': 'gun', '<:rope:357349458607865857>': 'rope', '💻': 'cipher', '🛠': 'tool',
-                           '<:facewithstuckouttongueandwinking:304763680707444736>': 'talk', '🏃': 'run'}
+        self.heist_items = {'gun': 0, 'rope': 0, 'cipher': 0, 'toolkit': 0}
+        self.react_list = {'🔫': 'gun', '<:rope:357349458607865857>': 'rope', '💻': 'cipher', '🛠': 'toolkit'}
         self.heist_started = False
-        self.number_of_scenarios = {'intro': 1, 'room': 0, 'vault': 1, 'getaway': 1}
+        self.number_of_scenarios = {'intro': 1, 'room': 1, 'vault': 1, 'getaway': 1}
 
         scenarios.client = client
-        scenarios.react_list = self.react_list
+        # scenarios.react_list = self.react_list
         scenarios.item_list = item_list
-
+        scenarios.item_list['talk'] = scenarios.Talk(None)
+        scenarios.item_list['run'] = scenarios.Run(None)
+        self.equipment_value = 1
+        self.starting_crew = 0
 
     async def start_heist(self, message):
         scenarios.channel = message.channel
@@ -131,20 +134,39 @@ class Heist(object):
             await client.edit_message(message, text)
         self.heist_started = True
         scenarios.heist_in_progress = True
-
-        self.number_of_scenarios['room'] = random.randint(2, 5)
+        self.starting_crew = len(scenarios.crew)
+        # self.number_of_scenarios['room'] = random.randint(2, 5)
 
         while self.number_of_scenarios['intro'] > 0:
-            await scenarios.start_random_intro()
+            if self.number_of_scenarios['intro'] > 0:
+                await scenarios.start_random_intro()
             self.number_of_scenarios['intro'] -= 1
 
+        while self.number_of_scenarios['room'] > 0:
+            if self.number_of_scenarios['room'] > 0:
+                await scenarios.start_random_room()
+            self.number_of_scenarios['room'] -= 1
+
+        while self.number_of_scenarios['vault'] > 0:
+            if self.number_of_scenarios['vault'] > 0:
+                await scenarios.start_random_vault()
+            self.number_of_scenarios['vault'] -= 1
+
+        while self.number_of_scenarios['getaway'] > 0:
+            if self.number_of_scenarios['getaway'] > 0:
+                await scenarios.start_random_getaway()
+            self.number_of_scenarios['getaway'] -= 1
+
+        if len(scenarios.crew) > 0:
+            winning_value_modifier = (self.equipment_value * 10) / self.starting_crew
+            await scenarios.win_heist(winning_value_modifier)
 
     async def get_bought_items(self, message):
         while True:
 
             if self.heist_started:
                 return
-            reply = await client.wait_for_reaction(emoji=None)
+            reply = await client.wait_for_reaction()
 
             if self.heist_started:
                 return
@@ -155,21 +177,36 @@ class Heist(object):
 
             if str(reply[0].emoji) in self.react_list:
                 user = str(reply[1])
+                print(user)
                 if user != 'Points Bot#7331':
-                    print(user)
                     emoji = str(reply[0].emoji)
                     if account_not_in_list(user):
                         create_account(user)
 
                     user_account = get_account(user)
-                    if user_account.items['point'].amount >= item_list[self.react_list[emoji]].value:
+                    if user_account.items[self.react_list[emoji]].amount > 0:
                         self.heist_items[item_list[self.react_list[emoji]].name] += 1
+                        scenarios.heist_items[item_list[self.react_list[emoji]].name] += 1
+                        user_account.give_item(self.react_list[emoji], -1)
+                        if user_account not in scenarios.crew:
+                            scenarios.crew.append(user_account)
+
+                        print(scenarios.heist_items)
+                        await client.send_message(message.channel, user_account.name[:-5] + ' brought their ' + item_list[
+                            self.react_list[emoji]].name + ' for the heist')
+                        self.equipment_value += item_list[self.react_list[emoji]].value
+                    elif user_account.items['point'].amount >= item_list[self.react_list[emoji]].value:
+
+                        self.heist_items[item_list[self.react_list[emoji]].name] += 1
+                        scenarios.heist_items[item_list[self.react_list[emoji]].name] += 1
                         user_account.give_item('point', -item_list[self.react_list[emoji]].value)
                         if user_account not in scenarios.crew:
                             scenarios.crew.append(user_account)
-                        await client.send_message(message.channel, user_account.name[:-5] + ' bought 1 ' + item_list[
-                            self.react_list[emoji]].name + ' for the crew')
 
+                        print(scenarios.heist_items)
+                        self.equipment_value += item_list[self.react_list[emoji]].value
+                        await client.send_message(message.channel, user_account.name[:-5] + ' bought 1 ' + item_list[
+                            self.react_list[emoji]].name + ' for the heist')
                     else:
                         await client.send_message(message.channel, 'Sorry, ' + user_account.name[
                                                                                :-5] + ', you don\'t have enough points to buy any ' +
@@ -187,33 +224,10 @@ class Heist(object):
             text += '\nTime remaining to join: ' + str(time_left) + ' seconds'
         return text
 
-
-    async def get_vote(self, message):
-        vote_counts = {}
-        for react in message.reactions:
-            if str(react.emoji) in self.react_list:
-                vote_counts[self.react_list[str(react.emoji)]] += 1
-        highest_vote = 0
-        highest_voter = None
-        for emoji in vote_counts:
-            if vote_counts[emoji] > highest_vote:
-                highest_vote = vote_counts[emoji]
-                highest_voter = emoji
-                vote_counts[emoji] = 0
-        if highest_vote in list(vote_counts.values()):
-            ties = [highest_voter]
-            for emoji in vote_counts:
-                if vote_counts[emoji] == highest_vote:
-                    ties.append(emoji)
-            return ties[random.randint(0, len(ties) - 1)]
-        else:
-            return highest_voter
-
     async def add_reacts(self, message, react_list):
         for item in item_list:
             emoji_index = None
             index = 0
-            items = {}
             for i in message.server.emojis:
                 if str(i) == item_list[item].emoji:
                     emoji_index = index
@@ -222,10 +236,8 @@ class Heist(object):
             if emoji_index is None:
                 if item_list[item].emoji in react_list:
                     await client.add_reaction(message, item_list[item].emoji)
-                    # items[item_list[item].emoji] = item_list[item]
             elif item_list[item].emoji in react_list:
                 await client.add_reaction(message, message.server.emojis[emoji_index])
-                # message.server.emojis[emoji_index] = item_list[item]
 
 
 class Account(object):
@@ -238,7 +250,7 @@ class Account(object):
     def give_item(self, thing, amount):
         class_names = {'point': 'Point', 'high-res blue dragon': 'HighResBlueDragon', 'eli': 'Eli', 'meme': 'Meme',
                        'small smiling stone face': 'SmallSmilingStoneFace', 'gun': 'Gun', 'rope': 'Rope',
-                       'cipher': 'Cipher'}
+                       'cipher': 'Cipher', 'toolkit': 'ToolKit'}
         if thing in self.items:
             self.items[thing].amount += amount
         else:
@@ -421,14 +433,6 @@ class Account(object):
         return [item, amount]
 
 
-# class Item(object):
-#
-#     def __init__(self, user):
-#         self.user = user
-#         self.amount = 0
-#         self.value = item_list[self.name]
-
-
 class Point(object):
     def __init__(self, user=None):
         self.name = 'point'
@@ -528,14 +532,14 @@ class Gun(object):
             user_shot = get_account(str(message.mentions[0]))
 
         onomatopoeia_list = ['Bam!', 'Boom!', 'Pow!', 'Kapow!', 'Kaboom!', 'Kabam!', 'Bang!', 'Pop!', 'Pew!',
-                             'Baddaboom!', 'Baddabooie!']
+                             'Badaboom!', 'Badabooie!']
         body_part_list = ['face', 'head', 'brain', 'left eye', 'right eye', 'mouth', 'neck', 'jaw', 'left cheek',
                           'right cheek', 'left shoulder', 'right shoulder', 'right arm', 'left arm', 'right hand',
                           'left hand',
                           'chest', 'ribcage', 'heart', 'left lung', 'right lung', 'stomach', 'kidney', 'liver',
                           'pancreas', 'bladder', 'hip', 'DICK', 'ASS', 'ASSHOLE', 'right ass cheek', 'left ass cheek',
                           'left thigh', 'right thigh', 'left leg', 'right leg', 'left kneecap', 'right kneecap',
-                          'left foot', 'right foot', 'bones! oof ouch owie']
+                          'left foot', 'right foot', 'bones! oof ouch owie!']
 
         if user_shot.name == self.user.name:
             await client.send_message(message.channel,
@@ -600,23 +604,11 @@ class Rope(object):
                 await client.edit_message(message, text)
         await asyncio.sleep(4)
         signature_list = ['Signing off', 'It wasn\'t just a meme after all', 'See ya', 'Fuck this shit im out',
-                          'Hopefully I tied this right', 'I\'m outta here', 'Look, Ma! I\'m flyin\'!']
+                          'Hopefully I tied this right']
         text += ' \n \n' + signature_list[random.randint(0, len(signature_list) - 1)] + '\n-' + self.user.name[:-5]
         await client.edit_message(message, text)
         delete_account(self.user.name)
         await client.send_message(message.channel, self.user.name[:-5] + '\'s account has been deleted')
-
-
-class Cipher(object):
-    def __init__(self, user):
-        self.name = 'cipher'
-        self.emoji = '💻'
-        self.user = user
-        self.amount = 0
-        self.value = 15
-
-    async def use(self, message):
-        self.user.give_item(self.name, -1)
 
 
 class Cipher(object):
@@ -636,7 +628,7 @@ class Cipher(object):
 
         await client.send_message(message.channel, 'Attempting to hack into ' + target.name[:-5] + '\'s account...')
         await asyncio.sleep(4)
-        if percent_throw < 20:
+        if percent_throw < 15:
             has_items = False
             for item in target.items:
                 if target.items[item].amount > 0:
@@ -661,9 +653,26 @@ class Cipher(object):
         self.user.using_cipher = False
         self.user.give_item(self.name, -1)
 
+class ToolKit(object):
+
+    def __init__(self, user):
+        self.name = 'toolkit'
+        self.emoji = '🛠'
+        self.user = user
+        self.amount = 0
+        self.value = 10
+        self.tools = ['hammer', 'sledgehammer', 'screwdriver', 'bone saw', 'knife', 'nailgun', 'hammer']
+
+    async def use(self, message):
+        tool = self.tools[random.randint(0, len(self.tools) - 1)]
+        await client.send_message(message.channel, self.user.name[:-5] + ' pulls out a ' + tool + ' from their toolbox')
+        await asyncio.sleep(3)
+        await client.send_message(message.channel, self.user.name[:-5] + ' admires their ' + tool + ' and polishes it\'s shiny metal surface.')
+        self.user.give_item(self.name, -1)
+
 item_list = {'point': Point(None), 'high-res blue dragon': HighResBlueDragon(None), 'meme': Meme(None),
              'eli': Eli(None), 'small smiling stone face': SmallSmilingStoneFace(None), 'gun': Gun(None),
-             'rope': Rope(None), 'cipher': Cipher(None)}
+             'rope': Rope(None), 'cipher': Cipher(None), 'toolkit': ToolKit(None)}
 
 accounts = []
 
